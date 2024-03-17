@@ -1,8 +1,8 @@
 package com.example.norman_lee.comicapp;
 
 import android.graphics.Bitmap;
-import android.net.Uri;
-import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -13,11 +13,16 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.norman_lee.comicapp.utils.Container;
+import com.example.norman_lee.comicapp.utils.Utils;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -36,58 +41,97 @@ public class MainActivity extends AppCompatActivity {
 
         //TODO 6.1 Ensure that Android Manifest has permissions for internet and has orientation fixed
         //TODO 6.2 Get references to widgets
+        editTextComicNo = findViewById(R.id.editTextComicNo);
+        buttonGetComic = findViewById(R.id.buttonGetComic);
+        textViewTitle = findViewById(R.id.textViewTitle);
+        imageViewComic = findViewById(R.id.imageViewComic);
 
-        //TODO 6.3 - 6.5 and 6.14 **********************************
+        //TODO 6.3 - 6.4 and 6.15 **********************************
         //TODO 6.3 Set up setOnClickListener for the button
         //TODO 6.4 Retrieve the user input from the EditText
-        //TODO 6.5 Set up the xkcd url by completing buildURL (see below)
-        //TODO 6.14 If network is active, instantiate your AsyncTask class and call the execute method
+        //TODO 6.5 If network is active, call the getComic method. Otherwise, show a Toast message
+        buttonGetComic.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                String userInput = editTextComicNo.getText().toString();
+                if (Utils.isNetworkAvailable(MainActivity.this)) {
+                    getComic(userInput);
+                } else {
+                    Toast.makeText(MainActivity.this, "No Network", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
 
-        //TODO 6.6 - 6.13 Modify GetComic Below *************
-
+        //TODO 6.6 - 6.15 Modify GetComic Below *************
     }
 
-    //TODO 6.5 Set up the xkcd url by completing buildURL (see below)
-    //TODO you are reminded that this is not part of onCreate
-    private URL buildURL(String comicNo){
-
-        String scheme = "https";
-        final String authority = "xkcd.com";
-        final String back = "info.0.json";
-        Uri.Builder builder;
-        URL url = null;
-
-
-        builder = new Uri.Builder();
-        builder.scheme(scheme)
-                .authority(authority)
-                .appendPath(back);
-
-
-        Uri uri = builder.build();
-
-        try{
-            url = new URL(uri.toString());
-            Log.i(TAG,"URL OK: " + url.toString());
-        }catch(MalformedURLException e) {
-            Log.i(TAG, "malformed URL: " + url.toString());
-        }
-
-        return url;
-
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.i("MainActivity", "onPause");
     }
 
-    //TODO 6.6 - 6.13 ****************
-    //TODO you are reminded that this is an inner class
-    //TODO 6.6 In publish progress, write code to update textViewTitle with a string
-    //TODO 6.6 In doInBackground, get the JSON Response
-    //TODO 6.7 If the JSON response is null, then call publishProgress with an appropriate message and return null
-    //TODO 6.8 Create a new JSONObject wtih a try/catch block
-    //TODO 6.9 Using getString, Extract the value with key "safe_title" and display it on textViewTitle
-    //TODO 6.10 Extract the image url with key "img"
-    //TODO 6.11 Create a URL object and put another catch block
-    //TODO 6.12 Get the image with the url
-    //TODO 6.13 Complete onPostExecute to assign the Bitmap downloaded to imageView
-    class GetComic{ }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.i("MainActivity", "onDestroy");
+    }
 
+    //TODO 6.6 - 6.15 ****************
+    //TODO you are reminded that this is NOT inside onCreate()
+    //TODO 6.6 Make sure an executor and a handler are instantiated
+    //TODO 6.7 (background work) create a final Container<Bitmap> cBitmap object which will be used for communication between the main thread and the child thread
+    //TODO 6.8 Call Utils.buildURL to get the URL based on the comic number from userInput
+    //TODO 6.9 Call Utils.getJSON to get the String response of the URL
+    //TODO 6.10 If the response is null, write a Toast message in main thread, otherwise:
+    //TODO 6.11 Inside a try/catch, get JSON object from the String response
+    //TODO 6.12 Extract the image string url with key "img" from the JSON object
+    //TODO 6.13 Extract the title with key "safe_title"
+    //TODO 6.14 Download the Bitmap using Utils.getBitmap
+    //TODO 6.15 (main thread) Assign the bitmap downloaded to imageView and set the title to textViewTitle
+
+    void getComic(final String userInput) {
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        Looper uiLooper = Looper.getMainLooper();
+        final Handler handler = new Handler(uiLooper);
+
+        executorService.execute(new Runnable() {
+            @Override
+            public void run() { // Background thread
+                final Container<Bitmap> cBitmap = new Container<>();
+                URL url = Utils.buildURL(userInput);
+                String response = Utils.getJson(url);
+                if (response == null) {
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            // main thread
+                            Log.i("UI Thread", "Invalid URL");
+                            Toast.makeText(MainActivity.this, "Invalid Comic No", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                } else {
+                    try {
+                        JSONObject jsonObject = new JSONObject(response);
+                        String imgURLString = jsonObject.getString("img");
+                        final String titleString = jsonObject.getString("safe_title");
+                        Bitmap bitmap = Utils.getBitmap(new URL(imgURLString));
+                        cBitmap.set(bitmap);
+                        handler.post(new Runnable() {
+                            // main thread
+                            @Override
+                            public void run() {
+                                imageViewComic.setImageBitmap(cBitmap.get());
+                                textViewTitle.setText(titleString);
+                            }
+                        });
+                    } catch (JSONException e) {
+                        throw new RuntimeException(e);
+                    } catch (MalformedURLException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        });
+    }
 }
