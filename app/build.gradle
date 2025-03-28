@@ -1,6 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
+    namespace "com.example.norman_lee.comicapp"
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.example.norman_lee.comicapp"

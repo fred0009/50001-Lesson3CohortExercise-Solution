@@ -65,18 +65,6 @@ public class MainActivity extends AppCompatActivity {
         //TODO 6.6 - 6.15 Modify GetComic Below *************
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        Log.i("MainActivity", "onPause");
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        Log.i("MainActivity", "onDestroy");
-    }
-
     //TODO 6.6 - 6.15 ****************
     //TODO you are reminded that this is NOT inside onCreate()
     //TODO 6.6 Make sure an executor and a handler are instantiated
@@ -102,12 +90,13 @@ public class MainActivity extends AppCompatActivity {
                 URL url = Utils.buildURL(userInput);
                 String response = Utils.getJson(url);
                 if (response == null) {
-                    handler.post(new Runnable() {
+                    handler.post(new Runnable() { // Main thread
                         @Override
                         public void run() {
                             // main thread
                             Log.i("UI Thread", "Invalid URL");
-                            Toast.makeText(MainActivity.this, "Invalid Comic No", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(MainActivity.this, "Comic does not exist",
+                                    Toast.LENGTH_SHORT).show();
                         }
                     });
                 } else {
@@ -126,9 +115,9 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
                     } catch (JSONException e) {
-                        throw new RuntimeException(e);
+                        Log.d(TAG, "JSON Exception: "+e.toString());
                     } catch (MalformedURLException e) {
-                        throw new RuntimeException(e);
+                        Log.d(TAG, "URL Exception: "+e.toString());
                     }
                 }
             }
